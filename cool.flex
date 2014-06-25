@@ -43,9 +43,7 @@ extern YYSTYPE cool_yylval;
  *  Add Your own definitions here
  */
 char *untmnt_msg = "Unterminated string constant";
-
-
-
+int comment_loop = 0; 
 %}
 
 /*
@@ -53,21 +51,34 @@ char *untmnt_msg = "Unterminated string constant";
  */
 
 %x COMMENT
+%x COMMENT_TYPEB
 %x STRING
 %x INVALID_STRING
 
 DARROW          =>
 
 %%
+"--"			{ BEGIN COMMENT_TYPEB;}
+<COMMENT_TYPEB>.	{			}
+<COMMENT_TYPEB>\n	{ curr_lineno++;
+			  BEGIN INITIAL;}
+"(*"			{ BEGIN COMMENT; comment_loop++;  }
+<COMMENT>"(*"		{ comment_loop++; }
+<COMMENT>"*)"		{ comment_loop--;
+			  if (comment_loop == 0)
+			  {
+				BEGIN INITIAL;
+			  }  
+			}
 
-"(*"			{ BEGIN COMMENT;  }
-<COMMENT>"*)"		{ BEGIN INITIAL;  }
-<COMMENT>[^*\n]+	{ 		  }
-<COMMENT>"*"		{		  }
-<COMMENT><<>>		{ BEGIN INITIAL;
+ /*<COMMENT>[^*\n]+	{ 		  }*/
+
+<COMMENT><<EOF>>	{ BEGIN INITIAL;
 			  cool_yylval.error_msg = "EOF in comment";
 			  return ERROR;}
 <COMMNET>\n		{ curr_lineno++;  }
+<COMMENT>\.		{ 		  }
+<COMMENT>.		{ 		  }
 
 
 \"			{ string_buf_ptr = string_buf;  BEGIN (STRING); }
@@ -94,7 +105,7 @@ DARROW          =>
 <STRING>\\f		{ *string_buf_ptr++ = '\f'; }
  /* comment line */
 
-<STRING>\\\		{ *string_buf_ptr++ = '\\'; }
+<STRING>\\		{ *string_buf_ptr++ = '\\'; }
 <STRING>\\\n		{ *string_buf_ptr++ = '\n'; curr_lineno++;
 			    }
 
@@ -104,8 +115,8 @@ DARROW          =>
 			  cool_yylval.error_msg = "Unterminated string constant.";
 			  return ERROR; }
 
-<STRING>\0\"	  	{ 
-			  BEGIN (INITIAL);
+<STRING>\\\0	  	{ 
+			  BEGIN (INVALID_STRING);
 			  cool_yylval.error_msg = "String contains escaped null character.";
 			  return ERROR;
 			}
@@ -146,45 +157,123 @@ DARROW          =>
   * which must begin with a lower-case letter.
   */
 
-"class"		{ return CLASS; }
+(?i:class)		{ return CLASS; }
 
-(?i:else)	{ return ELSE; }
+(?i:else)		{ return ELSE; }
 
-"fi"		{ return FI; }
-"if"		{ return IF; }
-"in"		{ return IN; }
-"inherits"	{ return INHERITS; }
-"let"		{ return LET; }
-"loop"		{ return LOOP; }
-"pool"		{ return POOL; }
-"then"		{ return THEN; }
-"while"		{ return WHILE; }
-"case"		{ return CASE; }
-"esac"		{ return ESAC; }
-"of"		{ return OF; }
-"darrow"	{ return DARROW; }
-"new"		{ return NEW; }
-"isvoid"	{ return ISVOID; }
-"str_const"	{ return STR_CONST; }
-"int_const"	{ return INT_CONST; }
+(?i:fi)			{ return FI; }
+(?i:if)			{ return IF; }
+(?i:in)			{ return IN; }
+(?i:inherits)		{ return INHERITS; }
+(?i:let)		{ return LET; }
+(?i:loop)		{ return LOOP; }
+(?i:pool)		{ return POOL; }
+(?i:then)		{ return THEN; }
+(?i:while)		{ return WHILE; }
+(?i:case)		{ return CASE; }
+(?i:esac)		{ return ESAC; }
+(?i:of)			{ return OF; }
+(?i:darrow)		{ return DARROW; }
+(?i:new)		{ return NEW; }
+(?i:isvoid)		{ return ISVOID; }
+(?i:not)		{ return NOT; }
+(?i:str_const)		{ return STR_CONST; }
+(?i:int_const)		{ return INT_CONST; }
+[0-9]+			{ cool_yylval.symbol = inttable.add_string(yytext);
+			  return INT_CONST;}
 
-"bool_const"	{ return BOOL_CONST; }
-(t(?i:rue))	{ cool_yylval.boolean = 1 ; return BOOL_CONST; }
+(?i:bool_const)		{ return BOOL_CONST; }
+(t(?i:rue)){1}		{ cool_yylval.boolean = 1 ; return BOOL_CONST; }
+(f(?i:alse))		{ cool_yylval.boolean = 0 ; return BOOL_CONST; }
 
-"typeid"	{ return TYPEID; }
-(T(?i:rue))	{ cool_yylval.symbol = idtable.add_string(yytext); return TYPEID; }
+(?i:typeid)		  	{ return TYPEID; }
+(T(?i:rue))			{ cool_yylval.symbol = idtable.add_string(yytext);
+			 	  return TYPEID; 
+			 	  }
+(F(?i:alse))			{ cool_yylval.symbol = idtable.add_string(yytext);
+			  	  return TYPEID;
+			  	  }
+(?-i:[A-Z])(?i:[a-z_]|[0-9])*	{ cool_yylval.symbol = idtable.add_string(yytext);
+				  return TYPEID;
+				  }
 
-"objectid"	{ return OBJECTID; }
-"assign"	{ return ASSIGN; }
-"not"		{ return NOT; }
-"le"		{ return LE; }
-"error"		{ return ERROR; }
-"let_stmt"	{ return LET_STMT; }
-"{"		{ return '{'; }
-"}"		{ return '}'; }
-"("		{ return '('; }
-")"		{ return ')'; }
-";"		{ return ';'; }
+
+(?i:objectid)			{ return OBJECTID; }
+(?-i:[a-z])(?i:[a-z_|0-9])*	{ cool_yylval.symbol = idtable.add_string(yytext);
+			  	  return OBJECTID;
+			  	  }
+
+
+
+
+(?i:assign)		{ return ASSIGN; }
+(?i:not)		{ return NOT; }
+(?i:le)			{ return LE; }
+(?i:error)		{ return ERROR; }
+(?i:let_stmt)		{ return LET_STMT; }
+"{"			{ return '{'; }
+"}"			{ return '}'; }
+"("			{ return '('; }
+")"			{ return ')'; }
+";"			{ return ';'; }
+","			{ return ','; }
+":"			{ return ':'; }
+"@"			{ return '@'; }
+"."			{ return '.'; }
+"+"			{ return '+'; }
+"*"			{ return '*'; }
+"/"			{ return '/'; }
+"-"			{ return '-'; }
+"~"			{ return '~'; }
+"<"			{ return '<'; }
+"="			{ return '='; }
+"<-"			{ return ASSIGN; }
+"<="			{ return LE; }
+
+"!" 			{ cool_yylval.error_msg = "!"; return ERROR; }
+"#"			{ cool_yylval.error_msg = "#"; return ERROR; }
+"$"			{ cool_yylval.error_msg = "$"; return ERROR; }
+"%"			{ cool_yylval.error_msg = "%"; return ERROR; }
+"^"			{ cool_yylval.error_msg = "^"; return ERROR; }
+"&"			{ cool_yylval.error_msg = "&"; return ERROR; }
+"_"			{ cool_yylval.error_msg = "_"; return ERROR; }
+">"			{ cool_yylval.error_msg = ">"; return ERROR; }
+"?"			{ cool_yylval.error_msg = "?"; return ERROR; }
+"`"			{ cool_yylval.error_msg = "`"; return ERROR; }
+"["			{ cool_yylval.error_msg = "["; return ERROR; }
+"]"			{ cool_yylval.error_msg = "]"; return ERROR; }
+\\			{ cool_yylval.error_msg = "\\" ; return ERROR; } 
+"|"			{ cool_yylval.error_msg = "|"; return ERROR; }
+[^\x20-x7E]		{ 
+			   string_buf_ptr = string_buf;
+			   char *yptr = yytext;
+			   char test = 'a';
+			   char len = 'a';
+			   int i = 0;
+			   int size;
+			   char *error = NULL;
+			   char *contains = "00";			
+
+			   while( *yptr ){
+   			  	*string_buf_ptr++ = *yptr++;
+				len = strlen(string_buf);
+				for(i = 0; i < len ; i++)
+				{
+					test = string_buf[i];
+					printf("INVALID is %d\n", test);
+					printf("Char is %c",'0'+test);
+					len = '0'+test;
+
+				}
+				
+				
+    				}
+			
+			 }
+
+"*)"			{ cool_yylval.error_msg = "Unmatched *)";
+			  return ERROR; }
+
 
 
 
@@ -199,3 +288,4 @@ DARROW          =>
 [ \t]		{			}
 
 %%
+
