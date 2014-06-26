@@ -60,8 +60,9 @@ DARROW          =>
 %%
 "--"			{ BEGIN COMMENT_TYPEB;}
 <COMMENT_TYPEB>.	{			}
-<COMMENT_TYPEB>\n	{ curr_lineno++;
-			  BEGIN INITIAL;}
+<COMMENT_TYPEB>\n	{ BEGIN INITIAL;
+			  curr_lineno++;
+			  }
 "(*"			{ BEGIN COMMENT; comment_loop++;  }
 <COMMENT>"(*"		{ comment_loop++; }
 <COMMENT>"*)"		{ comment_loop--;
@@ -77,13 +78,21 @@ DARROW          =>
 			  cool_yylval.error_msg = "EOF in comment";
 			  return ERROR;}
 <COMMNET>\n		{ curr_lineno++;  }
-<COMMENT>\.		{ 		  }
+<COMMENT>\x0a		{ curr_lineno++;  }
+<COMMENT>\.		{ 	  	  }
 <COMMENT>.		{ 		  }
 
 
 \"			{ string_buf_ptr = string_buf;  BEGIN (STRING); }
 <STRING>\"		{ BEGIN (INITIAL);
 			  *string_buf_ptr++ = '\0';
+			  if((int)strlen(string_buf) >= 1025)
+			  {
+				
+				cool_yylval.error_msg = "String constant too long";
+				return ERROR;
+			  }
+			  
 			  cool_yylval.symbol = stringtable.add_string(string_buf);
 			  return STR_CONST;
 			}
@@ -124,6 +133,7 @@ DARROW          =>
 <STRING>\\.		{ *string_buf_ptr++ = yytext[1];
 			}
 
+<STRING>"^"		{ *string_buf_ptr++ = yytext[0];}
 
 <STRING>[^\\\n\"|^\0]+	{ char *yptr = yytext;
 			  while( *yptr ){
@@ -135,7 +145,7 @@ DARROW          =>
 
 \"	{	BEGIN(INITIAL);	}
 
-\n	{	curr_lineno++;	}
+\n	{ BEGIN INITIAL; curr_lineno++;	}
 
 .	{			}
 
@@ -203,9 +213,6 @@ DARROW          =>
 			  	  return OBJECTID;
 			  	  }
 
-
-
-
 (?i:assign)		{ return ASSIGN; }
 (?i:not)		{ return NOT; }
 (?i:le)			{ return LE; }
@@ -244,36 +251,14 @@ DARROW          =>
 "]"			{ cool_yylval.error_msg = "]"; return ERROR; }
 \\			{ cool_yylval.error_msg = "\\" ; return ERROR; } 
 "|"			{ cool_yylval.error_msg = "|"; return ERROR; }
-[^\x20-x7E]		{ 
-			   string_buf_ptr = string_buf;
-			   char *yptr = yytext;
-			   char test = 'a';
-			   char len = 'a';
-			   int i = 0;
-			   int size;
-			   char *error = NULL;
-			   char *contains = "00";			
 
-			   while( *yptr ){
-   			  	*string_buf_ptr++ = *yptr++;
-				len = strlen(string_buf);
-				for(i = 0; i < len ; i++)
-				{
-					test = string_buf[i];
-					printf("INVALID is %d\n", test);
-					printf("Char is %c",'0'+test);
-					len = '0'+test;
-
-				}
-				
-				
-    				}
-			
+[^\x09\x0d\x0b\x0c\x20-\x7E]	{ 
+			  cool_yylval.error_msg = yytext;
+			  return ERROR;		
 			 }
 
 "*)"			{ cool_yylval.error_msg = "Unmatched *)";
 			  return ERROR; }
-
 
 
 
@@ -282,10 +267,10 @@ DARROW          =>
   *  Escape sequence \c is accepted for all characters c. Except for 
   *  \n \t \b \f, the result is c.
   *
-  */
+  */		
 
 \n		{ curr_lineno++;	}
-[ \t]		{			}
+[ \f\r\t\v]		{			}
 
 %%
 
