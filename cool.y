@@ -139,13 +139,24 @@
     %type <features> features_list
     %type <features> features
     %type <feature> feature
-
+    %type <formals> formals
+    %type <formal>  formal
+    %type <expression> expr
 
      // %type <expressions> expression
     
     /* Precedence declarations go here. */
-    
-    
+     //Bison manual - sec 2.2 
+    %right ASSIGN
+    %left NOT
+    %nonassoc LE '<' '='
+    %left '+' '-'
+    %left '*' '/'
+    %left ISVOID
+    %left '~'
+    %left '@'
+    %left '.'
+  
     %%
     /* 
     Save the root of the abstract syntax tree in a global variable.
@@ -156,22 +167,20 @@
     class_list
     : class			/* single class */
     { $$ = single_Classes($1);
-      printf("1\n");
     parse_results = $$; }
     | class_list class	/* several classes */
     { $$ = append_Classes($1,single_Classes($2)); 
     parse_results = $$;
-    printf("2\n");}
+    }
     ;
     
     /* If no parent is specified, the class inherits from the Object class. */
     class	: CLASS TYPEID '{' features_list '}' ';'
     { $$ = class_($2,idtable.add_string("Object"),$4,
-    stringtable.add_string(curr_filename));
-      printf("3\n");}
+		  stringtable.add_string(curr_filename));}
     | CLASS TYPEID INHERITS TYPEID '{' features_list '}' ';'
     { $$ = class_($2,$4,$6,stringtable.add_string(curr_filename)); 
-      printf("4\n");}
+      }
     ;
     
     /* Feature list may be empty, but no empty features in list. */
@@ -180,11 +189,26 @@
                     ;
     features : feature ';' { $$ = single_Features($1); }
                 | features feature ';' { $$ = append_Features($1, single_Features($2)); }
-         
-    feature :   OBJECTID ':' TYPEID { $$ = attr($1, $3, no_expr()); }
+                ;
+    feature :   OBJECTID '(' formals ')' ':' TYPEID '{' expr '}'
+                { $$ = method($1, $3, $6, $8);}
+                | OBJECTID ':' TYPEID { $$ = attr($1, $3, no_expr()); }
+                ;
 
+    formals:  formal { $$ = single_Formals($1);}
+             | formals ',' formal { $$ = append_Formals($1, single_Formals($3));}
+             | { $$ = nil_Formals();}
+              ;
 
- 
+    formal:   OBJECTID ':' TYPEID { $$ = formal($1, $3);}; 
+    
+    expr:  OBJECTID ASSIGN expr { $$ = assign($1, $3); }
+           | expr '+' expr { $$ = plus($1, $3);}
+           | INT_CONST { $$ = int_const($1);}
+           | OBJECTID { $$ = object($1);}
+           | STR_CONST { $$ = string_const($1);}
+           
+           ;
     
     
     /* end of grammar */
