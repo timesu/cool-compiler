@@ -141,7 +141,10 @@
     %type <feature> feature
     %type <formals> formals
     %type <formal>  formal
+    
+    %type <expressions> block_exprs
     %type <expression> expr
+    %type <expression> let_expr
 
      // %type <expressions> expression
     
@@ -156,7 +159,6 @@
     %left '~'
     %left '@'
     %left '.'
-  
     %%
     /* 
     Save the root of the abstract syntax tree in a global variable.
@@ -204,12 +206,45 @@
     
     expr:  OBJECTID ASSIGN expr { $$ = assign($1, $3); }
            | expr '+' expr { $$ = plus($1, $3);}
+           | expr '-' expr { $$ = sub($1, $3);}
+           | expr '*' expr { $$ = mul($1, $3); }
+           | expr '/' expr { $$ = divide($1, $3); }
+           | '~' expr { $$ = neg($2); }
+           | expr '<' expr { $$ = lt($1, $3); }
+           | expr LE expr { $$ = leq($1, $3); }
+           | expr '=' expr { $$ = eq($1, $3); }
+           | ISVOID expr { $$ = isvoid($2);}
+           | NOT expr { $$ = comp($2); }
+
+      
            | INT_CONST { $$ = int_const($1);}
            | OBJECTID { $$ = object($1);}
            | STR_CONST { $$ = string_const($1);}
+           | BOOL_CONST { $$ = bool_const($1);}
            
-           ;
-    
+           | WHILE expr LOOP expr POOL ';' { $$ =loop($2, $4); }
+           | IF expr THEN expr ELSE expr FI { $$ = cond($2, $4, $6);}
+
+           | LET let_expr { $$ = $2; }
+
+           | '{' block_exprs ';' '}' { $$ = block($2);}
+           ;    
+
+    block_exprs: expr { $$ = single_Expressions($1);}
+                 | block_exprs ';' expr 
+                   { $$ = append_Expressions($1, single_Expressions($3));}
+                 | { $$ = nil_Expressions();}
+                 ;
+      
+   let_expr : OBJECTID ':' TYPEID IN expr { $$ = let($1, $3, no_expr(), $5); }
+                | OBJECTID ':' TYPEID ASSIGN expr IN expr { $$ = let($1, $3, $5, $7); }
+                | OBJECTID ':' TYPEID ',' let_expr { $$ = let($1, $3, no_expr(), $5); }
+                | OBJECTID ':' TYPEID ASSIGN expr ',' let_expr { $$ = let($1, $3, $5, $7); }
+                | error IN expr { yyclearin; $$ = NULL; }
+                | error ',' let_expr { yyclearin; $$ = NULL; }
+                ;
+       
+
     
     /* end of grammar */
     %%
