@@ -141,6 +141,8 @@
     %type <feature> feature
     %type <formals> formals
     %type <formal>  formal
+    %type <cases>   cases
+    %type <case_>    single_case
     
     %type <expressions> block_exprs
     %type <expression> expr
@@ -183,6 +185,10 @@
     | CLASS TYPEID INHERITS TYPEID '{' features_list '}' ';'
     { $$ = class_($2,$4,$6,stringtable.add_string(curr_filename)); 
       }
+    | CLASS TYPEID '{' error '}' ';' { yyclearin; $$ = NULL; }
+   //| CLASS error '{' features_list '}' ';' { yyclearin; $$ = NULL; }
+    | CLASS error '{' error '}' ';' { yyclearin; $$ = NULL; }
+
     ;
     
     /* Feature list may be empty, but no empty features in list. */
@@ -191,10 +197,14 @@
                     ;
     features : feature ';' { $$ = single_Features($1); }
                 | features feature ';' { $$ = append_Features($1, single_Features($2)); }
+                | error ';' { yyclearin; $$ = NULL; }
                 ;
     feature :   OBJECTID '(' formals ')' ':' TYPEID '{' expr '}'
                 { $$ = method($1, $3, $6, $8);}
                 | OBJECTID ':' TYPEID { $$ = attr($1, $3, no_expr()); }
+                | OBJECTID ':' TYPEID ASSIGN expr { $$ = attr($1, $3, $5);}
+                | OBJECTID '(' formals ')' ':' TYPEID '{' error '}' { yyclearin; $$ = NULL;}
+                | error '(' formals ')' ':' TYPEID '{' expr '}'{ yyclearin; $$ = NULL;}
                 ;
 
     formals:  formal { $$ = single_Formals($1);}
@@ -215,28 +225,51 @@
            | expr '=' expr { $$ = eq($1, $3); }
            | ISVOID expr { $$ = isvoid($2);}
            | NOT expr { $$ = comp($2); }
-
+           | NEW TYPEID { $$ = new_($2);}
       
            | INT_CONST { $$ = int_const($1);}
            | OBJECTID { $$ = object($1);}
            | STR_CONST { $$ = string_const($1);}
            | BOOL_CONST { $$ = bool_const($1);}
            
-           | WHILE expr LOOP expr POOL ';' { $$ =loop($2, $4); }
-           | IF expr THEN expr ELSE expr FI { $$ = cond($2, $4, $6);}
 
+           | expr '.' OBJECTID '(' block_exprs ')' { $$ = dispatch($1, $3, $5); }
+           | OBJECTID '(' block_exprs ')' {$$ = dispatch(object(idtable.add_string("self")), $1, $3);}
+           | OBJECTID '(' error ')' { yyclearin; $$ = NULL;}
+           | expr '@' TYPEID '.' OBJECTID '(' block_exprs ')' { $$ = static_dispatch($1, $3, $5, $7);}  
+
+           | WHILE expr LOOP expr POOL  { $$ =loop($2, $4); }
+           | WHILE expr LOOP expr error { yyclearin; $$ = NULL;}
+ 
+
+           | IF expr THEN expr ELSE expr FI { $$ = cond($2, $4, $6);}
+ 
+           | CASE expr OF cases ESAC { $$ = typcase($2, $4);}
            | LET let_expr { $$ = $2; }
 
            | '{' block_exprs ';' '}' { $$ = block($2);}
+           | '(' expr ')'     { $$ = $2;}
+           | error   { yyclearin; $$ = NULL; }
+        
            ;    
+        
+           cases:single_case  { $$ = single_Cases($1);}
+             | cases  single_case { $$ = append_Cases($1, single_Cases($2));}
+             | {$$ = nil_Cases();}  
+             ;
 
-    block_exprs: expr { $$ = single_Expressions($1);}
+       single_case: OBJECTID ':' TYPEID DARROW expr ';'{$$ = branch($1, $3, $5);}
+
+       block_exprs: expr { $$ = single_Expressions($1);}
                  | block_exprs ';' expr 
                    { $$ = append_Expressions($1, single_Expressions($3));}
+                 | block_exprs ',' expr
+		   { $$ = append_Expressions($1, single_Expressions($3));}
                  | { $$ = nil_Expressions();}
+                
                  ;
       
-   let_expr : OBJECTID ':' TYPEID IN expr { $$ = let($1, $3, no_expr(), $5); }
+       let_expr : OBJECTID ':' TYPEID IN expr { $$ = let($1, $3, no_expr(), $5); }
                 | OBJECTID ':' TYPEID ASSIGN expr IN expr { $$ = let($1, $3, $5, $7); }
                 | OBJECTID ':' TYPEID ',' let_expr { $$ = let($1, $3, no_expr(), $5); }
                 | OBJECTID ':' TYPEID ASSIGN expr ',' let_expr { $$ = let($1, $3, $5, $7); }
